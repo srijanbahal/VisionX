@@ -4,6 +4,7 @@ A modular, interactive image processing application demonstrating core classical
 ### ✨ Project Overview
 ------------------
 
+
 **VisionX** is a classical computer vision toolkit built with **Python** and **Streamlit**, showcasing 10+ foundational algorithms such as:
 
 -   Texture analysis (GLCM),
