@@ -10,15 +10,16 @@ from typing import Optional, Dict, Any
 import os
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
+import re
 
 from .database import get_db, engine
-from . import models
 from .processors.edge_detection import EdgeDetectionProcessor
 from .processors.texture_analysis import TextureAnalysisProcessor
 from .processors.shape_detection import ShapeDetectionProcessor
 from .processors.image_enhancement import ImageEnhancementProcessor
 from .processors.geometric_transformation import GeometricTransformationProcessor
 from .processors.region_segmentation import RegionSegmentationProcessor
+from . import models, schemas
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
@@ -69,24 +70,51 @@ async def upload_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/process")
-async def process_image(
-    algorithm: str,
-    parameters: Dict[str, Any],
-    image: str,
-    db: Session = Depends(get_db)
-):
+async def process_image(payload: schemas.ProcessImageRequest, db: Session = Depends(get_db)):
+    print(f"[RAW BASE64] First 100 chars: {payload.image[:100]}")
+    print(f"[RAW BASE64] Length: {len(payload.image)}")
+
     try:
-        # Decode base64 image
+        algorithm = payload.algorithm
+        parameters = payload.parameters
+        image = payload.image
+        # print("tired af")
+        
+                
         if ',' in image:
             image = image.split(',')[1]
-        image_bytes = base64.b64decode(image)
+
+        # Fix padding issues: base64 strings must be length % 4 == 0
+        image = image.strip().replace('\n', '').replace('\r', '')
+        image = re.sub(r'[^A-Za-z0-9+/=]', '', image)
+
+        # Pad if needed
+        missing_padding = len(image) % 4
+        if missing_padding != 0:
+            image += '=' * (4 - missing_padding)
+        try:
+            image_bytes = base64.b64decode(image, validate=True)
+        except Exception as e:
+            print("---- BASE64 DECODE FAILED ----")
+            print(f"Image Length: {len(image)}")
+            print(f"Base64 Error: {e}")
+            with open("failed_base64.txt", "w") as f:
+                f.write(image)  # Save for analysis
+            raise HTTPException(status_code=400, detail="Base64 decode error.")
+        # print("iski mkc")
+        # Step 4: Decode image
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
+        # print(img)
         if img is None:
-            raise HTTPException(status_code=400, detail="Invalid image data")
-        
-        # Process image based on algorithm type
+            # Save broken image to debug (optional)
+            with open("broken_image.png", "wb") as f:
+                print("hoiii")
+                f.write(image_bytes)
+                print(image_bytes)
+            raise HTTPException(status_code=400, detail="cv2.imdecode failed: Invalid image bytes")
+
+        # Process image (same as before)
         if algorithm in ['canny', 'log', 'dog']:
             processed = EdgeDetectionProcessor.process(img, algorithm, parameters)
         elif algorithm == 'glcm':
@@ -101,12 +129,10 @@ async def process_image(
             processed = RegionSegmentationProcessor.process(img, algorithm, parameters)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown algorithm: {algorithm}")
-        
-        # Encode processed image
+
         _, buffer = cv2.imencode('.png', processed)
         processed_base64 = base64.b64encode(buffer).decode('utf-8')
-        
-        # Save processing history
+
         history = models.ProcessingHistory(
             original_image=image,
             processed_image=processed_base64,
@@ -115,11 +141,12 @@ async def process_image(
         )
         db.add(history)
         db.commit()
-        
+
         return {
             "processedImage": f"data:image/png;base64,{processed_base64}",
             "message": "Image processed successfully"
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

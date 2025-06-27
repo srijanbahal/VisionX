@@ -8,17 +8,16 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-export const uploadImage = async (file: File) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const response = await api.post('/upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
+// services/api.ts
+export const uploadImage = async (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);  // ✅ includes base64
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
-  return response.data;
 };
+
 
 export const processImage = async (algorithm: string, parameters: any, image: string) => {
   const response = await api.post('/process', {
@@ -26,6 +25,8 @@ export const processImage = async (algorithm: string, parameters: any, image: st
     parameters,
     image,
   });
+  console.log(response.data);
+  console.log(image);
   return response.data;
 };
 

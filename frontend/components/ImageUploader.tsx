@@ -8,20 +8,53 @@ const ImageUploader = () => {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // const onDrop = useCallback(async (acceptedFiles: File[]) => {
+  //   const file = acceptedFiles[0];
+  //   if (!file) return;
+  
+  //   setIsUploading(true);
+  //   setError(null);
+  
+  //   try {
+  //     // Preview URL for image display only
+  //     const previewUrl = URL.createObjectURL(file);
+  //     setOriginalImage(previewUrl);
+  
+  //     // Get base64 string
+  //     const base64Image = await uploadImage(file);
+  
+  //     // Store in Zustand or pass directly to processing
+  //     // Example: await processImage("canny", { threshold1: 50, threshold2: 100 }, base64Image);
+  //   } catch (error) {
+  //     console.error('Upload failed:', error);
+  //     setError('Failed to upload image. Please try again.');
+  //     setOriginalImage(null);
+  //   } finally {
+  //     setIsUploading(false);
+  //   }
+  // }, [setOriginalImage]);
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
-
+  
     setIsUploading(true);
     setError(null);
-
+  
     try {
-      // Create a preview URL for the image
-      const previewUrl = URL.createObjectURL(file);
-      setOriginalImage(previewUrl);
-
-      // Upload the image to the backend
-      await uploadImage(file);
+      const base64Image = await uploadImage(file);  // ✅ get base64 string
+      setOriginalImage(base64Image);                // ✅ store base64 in Zustand
+  
+      console.log("📷 Base64 Length:", base64Image.length);
+      console.log("📷 Base64 Prefix:", base64Image.slice(0, 50));
+  
+      try {
+        const base64Data = base64Image.split(',')[1];
+        atob(base64Data);  // JS base64 decode — will throw error if invalid
+        console.log("✅ Base64 is valid in frontend.");
+      } catch (err) {
+        console.error("❌ Invalid base64 in frontend:", err);
+      }
+  
     } catch (error) {
       console.error('Upload failed:', error);
       setError('Failed to upload image. Please try again.');
@@ -30,6 +63,7 @@ const ImageUploader = () => {
       setIsUploading(false);
     }
   }, [setOriginalImage]);
+  
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -42,14 +76,14 @@ const ImageUploader = () => {
   return (
     <div
       {...getRootProps()}
-      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+      className={`max-w-md mx-auto border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
         ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'}
         ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       <input {...getInputProps()} disabled={isUploading} />
-      <div className="space-y-4">
+      <div className="space-y-4 flex flex-col items-center justify-center">
         <svg
-          className="mx-auto h-12 w-12 text-gray-400"
+          className="mx-auto h-16 w-16 text-gray-400"
           stroke="currentColor"
           fill="none"
           viewBox="0 0 48 48"
@@ -68,10 +102,12 @@ const ImageUploader = () => {
           ) : isDragActive ? (
             <p>Drop the image here ...</p>
           ) : (
-            <p>Drag and drop an image here, or click to select one</p>
+            <>
+              <p className="font-medium">Drag and drop an image here, or click to select one</p>
+              <p className="text-xs text-gray-400 mt-1">Supported formats: PNG, JPG, GIF up to 10MB</p>
+            </>
           )}
         </div>
-        <p className="text-sm text-gray-500">PNG, JPG, GIF up to 10MB</p>
         {error && (
           <p className="text-sm text-red-500">{error}</p>
         )}
